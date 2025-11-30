@@ -1,14 +1,30 @@
-import React, { useRef, useEffect } from 'react';
-import { Send, MoreVertical, Search, Smile, Paperclip, Mic, ArrowLeft } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Send, MoreVertical, Search, Phone, Video, Smile, Paperclip, Mic, ArrowLeft, X, StopCircle } from 'lucide-react';
+import { Theme, type EmojiClickData } from 'emoji-picker-react';
 import { useChat } from './hooks/useChat';
 import ChatBubble from './components/ChatBubble';
+import type{ Attachment } from './types';
+import { blobToBase64 } from './services/geminiService';
 import './App.css';
+import EmojiPicker from 'emoji-picker-react';
 
 const App: React.FC = () => {
   const { messages, inputText, setInputText, handleSend, handleReset } = useChat();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // UI States
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  // Audio Recording Refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
@@ -30,7 +46,104 @@ const App: React.FC = () => {
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      onSend();
+    }
+  };
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setInputText((prev) => prev + emojiData.emoji);
+  };
+
+  // --- Image Handling ---
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) return;
+      
+      const base64 = await blobToBase64(file);
+      setAttachment({
+        type: 'image',
+        url: URL.createObjectURL(file),
+        data: base64,
+        mimeType: file.type
+      });
+    }
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const clearAttachment = () => {
+    setAttachment(null);
+  };
+
+  // --- Audio Recording Handling ---
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' }); // Gemini handles mp3/wav/etc
+        const base64 = await blobToBase64(audioBlob);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Directly send audio message
+        const audioAttachment: Attachment = {
+            type: 'audio',
+            url: audioUrl,
+            data: base64,
+            mimeType: 'audio/mp3'
+        };
+        handleSend("", audioAttachment);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      
+      // Timer
+      setRecordingDuration(0);
+      timerRef.current = window.setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("Microphone access denied or not available.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); // Stop stream
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  const formatDuration = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  // --- Send Wrapper ---
+  const onSend = () => {
+    if (inputText.trim() || attachment) {
+      handleSend(inputText, attachment);
+      setAttachment(null);
+      setShowEmojiPicker(false);
     }
   };
 
@@ -46,23 +159,21 @@ const App: React.FC = () => {
                 <ArrowLeft size={24} />
             </button>
             <div className="avatar-container">
-                {/* Meta AI Ring Logo */}
                 <div className="meta-ring">
                     <div className="meta-avatar-inner">
                         <div className="meta-gradient-overlay"></div>
                         <img 
-                            src="https://images.sftcdn.net/images/t_app-icon-m/p/7accf6af-ce49-43eb-a290-c87bdd396d5a/1907296832/arattai-logo" 
+                            src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Meta-Logo.png" 
                             alt="Meta AI" 
                             className="meta-logo" 
                         />
                     </div>
                 </div>
-                {/* Online Indicator */}
                 <span className="online-indicator"></span>
             </div>
             
             <div className="header-info">
-              <h1 className="header-title">Arattai AI</h1>
+              <h1 className="header-title">Meta AI</h1>
               <p className="header-subtitle">
                  with Llama 3
               </p>
@@ -87,7 +198,6 @@ const App: React.FC = () => {
 
         {/* Messages List */}
         <div className="messages-list">
-          {/* Encryption Notice */}
           <div className="encryption-notice">
             <div className="notice-box">
               Messages are generated by AI. Some messages may be inaccurate.
@@ -129,38 +239,88 @@ const App: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        <div className="input-area">
-            <button className="icon-btn">
-                <Smile size={24} />
-            </button>
-            <button className="icon-btn">
-                <Paperclip size={24} />
-            </button>
-
-            <div className="input-wrapper">
-                <textarea
-                    ref={textareaRef}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Message"
-                    className="chat-input"
-                    rows={1}
+        {/* Emoji Picker Popover */}
+        {showEmojiPicker && (
+            <div className="emoji-picker-container">
+                <EmojiPicker 
+                    onEmojiClick={onEmojiClick} 
+                    theme={Theme.AUTO}
+                    searchDisabled={false}
+                    width="100%"
+                    height={350}
+                    previewConfig={{ showPreview: false }}
                 />
             </div>
+        )}
 
-            {inputText.trim() ? (
-                <button 
-                    onClick={() => handleSend()} 
-                    className="send-btn"
-                >
+        {/* Input Area */}
+        <div className="input-area">
+            
+            {/* Attachment Preview (Image) */}
+            {attachment && attachment.type === 'image' && (
+                <div className="attachment-preview">
+                    <div className="preview-card">
+                        <img src={attachment.url} alt="Preview" />
+                        <button className="remove-attachment" onClick={clearAttachment}>
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <button 
+                className={`icon-btn ${showEmojiPicker ? 'active-emoji-btn' : ''}`}
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            >
+                {showEmojiPicker ? <X size={24} /> : <Smile size={24} />}
+            </button>
+            
+            <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip size={24} />
+            </button>
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileSelect} 
+                accept="image/*" 
+                style={{ display: 'none' }} 
+            />
+
+            <div className="input-wrapper">
+                {isRecording ? (
+                    <div className="recording-status">
+                        <div className="recording-dot"></div>
+                        <span className="recording-time">{formatDuration(recordingDuration)}</span>
+                        <span className="recording-text">Recording...</span>
+                    </div>
+                ) : (
+                    <textarea
+                        ref={textareaRef}
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={onKeyDown}
+                        placeholder="Message"
+                        className="chat-input"
+                        rows={1}
+                        onClick={() => setShowEmojiPicker(false)}
+                    />
+                )}
+            </div>
+
+            {inputText.trim() || attachment ? (
+                <button onClick={onSend} className="send-btn">
                     <Send size={20} fill="white" />
                 </button>
             ) : (
-                <button className="icon-btn">
-                    <Mic size={24} />
-                </button>
+                isRecording ? (
+                    <button onClick={stopRecording} className="send-btn recording-stop">
+                         <StopCircle size={24} />
+                    </button>
+                ) : (
+                    <button onClick={startRecording} className="icon-btn mic-btn">
+                        <Mic size={24} />
+                    </button>
+                )
             )}
         </div>
       </div>

@@ -1,6 +1,5 @@
 import React from 'react';
-import type { Message } from '../types';
-import { Role } from '../types';
+import { type Message, Role } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface ChatBubbleProps {
@@ -14,19 +13,37 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
     <div className={`bubble-row ${isUser ? 'user' : 'model'}`}>
       <div className={`bubble ${isUser ? 'user' : 'model'}`}>
         
-        {/* Render Content */}
-        <div className={isUser ? "" : "content-offset"}>
-            {message.content ? (
-                <MarkdownRenderer content={message.content} />
-            ) : (
-                <div className="typing-indicator">
-                    <div className="dot" style={{ animationDelay: '0ms' }}></div>
-                    <div className="dot" style={{ animationDelay: '150ms' }}></div>
-                    <div className="dot" style={{ animationDelay: '300ms' }}></div>
-                </div>
-            )}
-        </div>
-        
+        {/* Render Attachment (Image) */}
+        {message.attachment?.type === 'image' && (
+            <div className="bubble-image-container">
+                <img src={message.attachment.url} alt="Sent image" className="bubble-image" />
+            </div>
+        )}
+
+        {/* Render Attachment (Audio) */}
+        {message.attachment?.type === 'audio' && (
+            <div className="bubble-audio-container">
+                <audio controls src={message.attachment.url} className="bubble-audio" />
+            </div>
+        )}
+
+        {/* Render Text Content */}
+        {(message.content || (!message.attachment && !message.content)) && (
+            <div className={isUser ? "" : "content-offset"}>
+                {message.content ? (
+                    <MarkdownRenderer content={message.content} />
+                ) : (
+                    /* Show typing indicator only if there is no content AND no attachment yet (for AI) */
+                    !message.attachment && (
+                        <div className="typing-indicator">
+                            <div className="dot" style={{ animationDelay: '0ms' }}></div>
+                            <div className="dot" style={{ animationDelay: '150ms' }}></div>
+                            <div className="dot" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                    )
+                )}
+            </div>
+        )}
 
         {/* Timestamp & Read Receipts */}
         <div className="timestamp">

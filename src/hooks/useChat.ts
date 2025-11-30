@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { type Message, Role } from '../types';
+import { type Message, Role, type Attachment } from '../types';
 import { sendMessageStream, resetChatSession } from '../services/geminiService';
 
 export const useChat = () => {
@@ -15,9 +15,11 @@ export const useChat = () => {
     setMessages([]);
   };
 
-  const handleSend = async (text: string = inputText) => {
+  const handleSend = async (text: string = inputText, attachment: Attachment | null = null) => {
     const trimmedText = text.trim();
-    if (!trimmedText || isLoading) return;
+    
+    // Don't send if both text and attachment are empty
+    if ((!trimmedText && !attachment) || isLoading) return;
 
     // Add User Message
     const userMessage: Message = {
@@ -25,6 +27,7 @@ export const useChat = () => {
       role: Role.USER,
       content: trimmedText,
       timestamp: Date.now(),
+      attachment: attachment
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -45,7 +48,7 @@ export const useChat = () => {
       
       setMessages(prev => [...prev, initialAiMessage]);
 
-      const stream = await sendMessageStream(userMessage.content);
+      const stream = await sendMessageStream(userMessage.content, userMessage.attachment || null);
       
       let fullContent = '';
 
