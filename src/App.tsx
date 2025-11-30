@@ -62,7 +62,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="header-info">
-              <h1 className="header-title">Meta AI</h1>
+              <h1 className="header-title">Arattai AI</h1>
               <p className="header-subtitle">
                  with Llama 3
               </p>
