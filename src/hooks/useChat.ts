@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { type Message, Role, type Attachment } from '../types';
+import { type Message, Role, type Attachment, type ReplyContext } from '../types';
 import { sendMessageStream, resetChatSession } from '../services/geminiService';
 
 export const useChat = () => {
@@ -15,7 +15,13 @@ export const useChat = () => {
     setMessages([]);
   };
 
-  const handleSend = async (text: string = inputText, attachment: Attachment | null = null) => {
+  const reactToMessage = (messageId: string, reaction: 'like' | 'dislike' | null) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, reaction: msg.reaction === reaction ? null : reaction } : msg
+    ));
+  };
+
+  const handleSend = async (text: string = inputText, attachment: Attachment | null = null, replyTo: ReplyContext | null = null) => {
     const trimmedText = text.trim();
     
     // Don't send if both text and attachment are empty
@@ -27,7 +33,8 @@ export const useChat = () => {
       role: Role.USER,
       content: trimmedText,
       timestamp: Date.now(),
-      attachment: attachment
+      attachment: attachment,
+      replyTo: replyTo
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -48,7 +55,13 @@ export const useChat = () => {
       
       setMessages(prev => [...prev, initialAiMessage]);
 
-      const stream = await sendMessageStream(userMessage.content, userMessage.attachment || null);
+      // Construct context for the AI if it's a reply
+      let prompt = userMessage.content;
+      if (replyTo) {
+        prompt = `[Replying to ${replyTo.isUser ? 'User' : 'AI'}: "${replyTo.text}"]\n${prompt}`;
+      }
+
+      const stream = await sendMessageStream(prompt, userMessage.attachment || null);
       
       let fullContent = '';
 
@@ -96,6 +109,7 @@ export const useChat = () => {
     setInputText,
     isLoading,
     handleSend,
-    handleReset
+    handleReset,
+    reactToMessage
   };
 };

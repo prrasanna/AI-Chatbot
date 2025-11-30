@@ -3,13 +3,13 @@ import { Send, MoreVertical, Search, Phone, Video, Smile, Paperclip, Mic, ArrowL
 import { Theme, type EmojiClickData } from 'emoji-picker-react';
 import { useChat } from './hooks/useChat';
 import ChatBubble from './components/ChatBubble';
-import type{ Attachment } from './types';
+import { type Attachment, type Message, Role, type ReplyContext } from './types';
 import { blobToBase64 } from './services/geminiService';
 import './App.css';
 import EmojiPicker from 'emoji-picker-react';
 
 const App: React.FC = () => {
-  const { messages, inputText, setInputText, handleSend, handleReset } = useChat();
+  const { messages, inputText, setInputText, handleSend, handleReset, reactToMessage } = useChat();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -21,6 +21,11 @@ const App: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
+  // New Features States
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Audio Recording Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -31,8 +36,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!isSearchOpen && !searchQuery) {
+        scrollToBottom();
+    }
+  }, [messages, isSearchOpen, searchQuery]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -91,11 +98,10 @@ const App: React.FC = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' }); // Gemini handles mp3/wav/etc
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' }); 
         const base64 = await blobToBase64(audioBlob);
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        // Directly send audio message
         const audioAttachment: Attachment = {
             type: 'audio',
             url: audioUrl,
@@ -108,7 +114,6 @@ const App: React.FC = () => {
       mediaRecorder.start();
       setIsRecording(true);
       
-      // Timer
       setRecordingDuration(0);
       timerRef.current = window.setInterval(() => {
         setRecordingDuration(prev => prev + 1);
@@ -138,59 +143,100 @@ const App: React.FC = () => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // --- Action Handlers ---
+  const handleReply = (msg: Message) => {
+    setReplyingTo(msg);
+    textareaRef.current?.focus();
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    // Optional: Show toast
+  };
+
+  const handleForward = (msg: Message) => {
+    // Mock forward action
+    alert(`Forwarded message: "${msg.content.substring(0, 20)}..."`);
+    // Ideally, this opens a contact list. Here we just echo it back as a forwarded message.
+    // handleSend(msg.content); // This would send it back to bot. 
+  };
+
   // --- Send Wrapper ---
   const onSend = () => {
     if (inputText.trim() || attachment) {
-      handleSend(inputText, attachment);
+      const replyContext: ReplyContext | null = replyingTo ? {
+        id: replyingTo.id,
+        text: replyingTo.content,
+        isUser: replyingTo.role === Role.USER
+      } : null;
+
+      handleSend(inputText, attachment, replyContext);
+      
+      // Clear states
       setAttachment(null);
+      setReplyingTo(null);
       setShowEmojiPicker(false);
     }
   };
 
+  // Filter messages for search
+  const displayedMessages = searchQuery 
+    ? messages.filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    : messages;
+
   return (
     <div className="app-container">
-       {/* Main Container */}
       <div className="main-window">
         
-        {/* WhatsApp Header */}
+        {/* Header (Dynamic for Search) */}
         <header className="header">
-          <div className="header-left">
-            <button className="back-btn">
-                <ArrowLeft size={24} />
-            </button>
-            <div className="avatar-container">
-                <div className="meta-ring">
-                    <div className="meta-avatar-inner">
-                        <div className="meta-gradient-overlay"></div>
-                        <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Meta-Logo.png" 
-                            alt="Meta AI" 
-                            className="meta-logo" 
-                        />
+          {isSearchOpen ? (
+            <div className="search-header">
+                <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }} className="icon-btn">
+                    <ArrowLeft size={20} />
+                </button>
+                <input 
+                    autoFocus
+                    type="text" 
+                    placeholder="Search..." 
+                    className="search-input"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                 {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="icon-btn">
+                        <X size={18} />
+                    </button>
+                 )}
+            </div>
+          ) : (
+              <>
+                <div className="header-left">
+                    <button className="back-btn"><ArrowLeft size={24} /></button>
+                    <div className="avatar-container">
+                        <div className="meta-ring">
+                            <div className="meta-avatar-inner">
+                                <div className="meta-gradient-overlay"></div>
+                                <img src="https://play-lh.googleusercontent.com/24v05HzQlZKLWKRDsqKTmVvjk5iRZgjH0wZSh9SzNxGQ3fNtwz-R_RPIvs7__-Q3yw" alt="Meta AI" className="meta-logo" />
+                            </div>
+                        </div>
+                        <span className="online-indicator"></span>
+                    </div>
+                    <div className="header-info">
+                        <h1 className="header-title">Meta AI</h1>
+                        <p className="header-subtitle">with Llama 3</p>
                     </div>
                 </div>
-                <span className="online-indicator"></span>
-            </div>
-            
-            <div className="header-info">
-              <h1 className="header-title">Meta AI</h1>
-              <p className="header-subtitle">
-                 with Llama 3
-              </p>
-            </div>
-          </div>
 
-          <div className="header-actions">
-             <div className="divider mobile-hide"></div>
-             <button className="icon-btn"><Search size={20} /></button>
-             <button 
-                onClick={handleReset}
-                className="icon-btn" 
-                title="Clear Chat"
-             >
-                <MoreVertical size={20} />
-             </button>
-          </div>
+                <div className="header-actions">
+                    <button className="icon-btn mobile-hide"><Video size={20} /></button>
+                    <button className="icon-btn mobile-hide"><Phone size={20} /></button>
+                    <div className="divider mobile-hide"></div>
+                    <button onClick={() => setIsSearchOpen(true)} className="icon-btn"><Search size={20} /></button>
+                    <button onClick={handleReset} className="icon-btn" title="Clear Chat"><MoreVertical size={20} /></button>
+                </div>
+              </>
+          )}
         </header>
 
         {/* Chat Area Background */}
@@ -207,19 +253,13 @@ const App: React.FC = () => {
           {messages.length === 0 && (
              <div className="empty-state">
                  <div className="welcome-ring">
-                    <div className="welcome-inner">
-                        <div className="welcome-overlay"></div>
-                    </div>
+                    <div className="welcome-inner"><div className="welcome-overlay"></div></div>
                  </div>
                  <h2 className="empty-title">Ask Meta AI anything</h2>
-                 <p className="empty-desc">
-                     Get answers, learn something new, or translate languages instantly.
-                 </p>
-                 
+                 <p className="empty-desc">Get answers, learn something new, or translate languages instantly.</p>
                  <div className="suggestion-grid">
                     <button onClick={() => handleSend("Tell me a fun fact")} className="suggestion-btn">
-                        💡 Tell me a fun fact
-                    </button>
+                        💡 Tell me a fun fact</button>
                     <button onClick={() => handleSend("Write a React component")} className="suggestion-btn">
                         ⚛️ Write a React component
                     </button>
@@ -233,8 +273,16 @@ const App: React.FC = () => {
              </div>
           )}
 
-          {messages.map((msg) => (
-            <ChatBubble key={msg.id} message={msg} />
+          {displayedMessages.map((msg) => (
+            <ChatBubble 
+                key={msg.id} 
+                message={msg} 
+                searchQuery={searchQuery}
+                onReply={handleReply}
+                onCopy={handleCopy}
+                onForward={handleForward}
+                onReact={reactToMessage}
+            />
           ))}
           <div ref={messagesEndRef} />
         </div>
@@ -242,49 +290,44 @@ const App: React.FC = () => {
         {/* Emoji Picker Popover */}
         {showEmojiPicker && (
             <div className="emoji-picker-container">
-                <EmojiPicker 
-                    onEmojiClick={onEmojiClick} 
-                    theme={Theme.AUTO}
-                    searchDisabled={false}
-                    width="100%"
-                    height={350}
-                    previewConfig={{ showPreview: false }}
-                />
+                <EmojiPicker onEmojiClick={onEmojiClick} theme={Theme.AUTO} searchDisabled={false} width="100%" height={350} previewConfig={{ showPreview: false }} />
             </div>
         )}
 
         {/* Input Area */}
         <div className="input-area">
             
-            {/* Attachment Preview (Image) */}
+            {/* Reply Preview */}
+            {replyingTo && (
+                <div className="reply-preview-bar">
+                    <div className="reply-content">
+                        <span className="reply-title">{replyingTo.role === Role.USER ? 'You' : 'Meta AI'}</span>
+                        <span className="reply-text">{replyingTo.content}</span>
+                    </div>
+                    <button onClick={() => setReplyingTo(null)} className="close-reply-btn">
+                        <X size={20} />
+                    </button>
+                </div>
+            )}
+
+            {/* Attachment Preview */}
             {attachment && attachment.type === 'image' && (
                 <div className="attachment-preview">
                     <div className="preview-card">
                         <img src={attachment.url} alt="Preview" />
-                        <button className="remove-attachment" onClick={clearAttachment}>
-                            <X size={16} />
-                        </button>
+                        <button className="remove-attachment" onClick={clearAttachment}><X size={16} /></button>
                     </div>
                 </div>
             )}
 
-            <button 
-                className={`icon-btn ${showEmojiPicker ? 'active-emoji-btn' : ''}`}
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            >
+            <button className={`icon-btn ${showEmojiPicker ? 'active-emoji-btn' : ''}`} onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
                 {showEmojiPicker ? <X size={24} /> : <Smile size={24} />}
             </button>
             
             <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
                 <Paperclip size={24} />
             </button>
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileSelect} 
-                accept="image/*" 
-                style={{ display: 'none' }} 
-            />
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" style={{ display: 'none' }} />
 
             <div className="input-wrapper">
                 {isRecording ? (
