@@ -26,6 +26,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
                 </div>
             )}
         </div>
+        
 
         {/* Timestamp & Read Receipts */}
         <div className="timestamp">

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Send, MoreVertical, Search, Phone, Video, Smile, Paperclip, Mic, ArrowLeft } from 'lucide-react';
+import { Send, MoreVertical, Search, Smile, Paperclip, Mic, ArrowLeft } from 'lucide-react';
 import { useChat } from './hooks/useChat';
 import ChatBubble from './components/ChatBubble';
 import './App.css';
@@ -51,7 +51,7 @@ const App: React.FC = () => {
                     <div className="meta-avatar-inner">
                         <div className="meta-gradient-overlay"></div>
                         <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Meta-Logo.png" 
+                            src="https://images.sftcdn.net/images/t_app-icon-m/p/7accf6af-ce49-43eb-a290-c87bdd396d5a/1907296832/arattai-logo" 
                             alt="Meta AI" 
                             className="meta-logo" 
                         />
@@ -70,8 +70,6 @@ const App: React.FC = () => {
           </div>
 
           <div className="header-actions">
-             <button className="icon-btn mobile-hide"><Video size={20} /></button>
-             <button className="icon-btn mobile-hide"><Phone size={20} /></button>
              <div className="divider mobile-hide"></div>
              <button className="icon-btn"><Search size={20} /></button>
              <button 
