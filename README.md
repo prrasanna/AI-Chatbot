@@ -1,7 +1,3 @@
-ChatBot AI Working Demo 
-
-https://github.com/user-attachments/assets/5f723b39-2564-4a40-a47d-9109e189cbf0
-
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
